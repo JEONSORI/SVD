@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="source">
+      <UniqueIdentifier>{8e90f2e7-bdcf-4be5-ae8d-af137341d519}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="header">
+      <UniqueIdentifier>{30459fed-fef6-4967-8296-fbeb9a81772b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="source\Main.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="source\IO.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="source\XS.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+    <ClCompile Include="header\Array.cpp">
+      <Filter>source</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="header\IO.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Defines.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="header\XS.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Array.h">
+      <Filter>header</Filter>
+    </ClInclude>
+    <ClInclude Include="header\Util.h">
+      <Filter>header</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
