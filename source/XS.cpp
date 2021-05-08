@@ -4,6 +4,7 @@
 
 GC_t GC;
 
+#define Joule2Mev 62415064799.632
 void GC_t::ReadGCfile() {
 	hid_t file;
 	Array<int> PinIdx, Bidx;
@@ -97,7 +98,7 @@ void GC_t::ReadGCfile() {
 	pnum.Create(this->num_iso, this->nburnup, this->nGcType);
 	pnum_avg.Create(this->num_iso, this->nGcType);
 	flux_avg.Create(this->num_groups, this->nGcType);
-	pnum_avg = 1E-30; flux_avg = 1E-30; ////
+	pnum_avg = 1E-30; flux_avg = 1E-30;
 
 	Tm.Create(this->nTmMax + 1, this->nburnup, this->nGcType);
 	Tf.Create(this->nTfMax + 1, this->nburnup, this->nGcType);
@@ -614,7 +615,7 @@ void GC_t::SetMatrix()
 						int ic = _react * num_groups * num_iso + ig * num_iso + iso;
 						Aorg(ir, ic) = myPt.GC(ig, iso, react, iGcType);
 						A(ir, ic) = myPt.GC(ig, iso, react, iGcType) * wt_pnum * wt_flux;
-						if (react == sigType::sigKf) A(ir, ic) *= 1E11;
+						if (react == sigType::sigKf) A(ir, ic) *= Joule2Mev;
 					}
 				}
 			}
@@ -639,7 +640,7 @@ void GC_t::SetMatrix()
 								int ic = _react * num_groups * num_iso + ig * num_iso + iso;
 								Aorg(ir, ic) = myPt.GC(ig, iso, react, iGcType);
 								A(ir, ic) = myPt.GC(ig, iso, react, iGcType) * wt_pnum * wt_flux;
-								if (react == sigType::sigKf) A(ir, ic) *= 1E11;
+								if (react == sigType::sigKf) A(ir, ic) *= Joule2Mev;
 							}
 						}
 					}
@@ -663,7 +664,7 @@ void GC_t::SetMatrix()
 								int ic = _react * num_groups * num_iso + ig * num_iso + iso;
 								Aorg(ir, ic) = myPt.GC(ig, iso, react, iGcType);
 								A(ir, ic) = myPt.GC(ig, iso, react, iGcType) * wt_pnum * wt_flux;
-								if (react == sigType::sigKf) A(ir, ic) *= 1E11;
+								if (react == sigType::sigKf) A(ir, ic) *= Joule2Mev;
 							}
 						}
 					}
@@ -687,7 +688,7 @@ void GC_t::SetMatrix()
 								int ic = _react * num_groups * num_iso + ig * num_iso + iso;
 								Aorg(ir, ic) = myPt.GC(ig, iso, react, iGcType);
 								A(ir, ic) = myPt.GC(ig, iso, react, iGcType) * wt_pnum * wt_flux;
-								if (react == sigType::sigKf) A(ir, ic) *= 1E11;
+								if (react == sigType::sigKf) A(ir, ic) *= Joule2Mev;
 							}
 						}
 					}
@@ -711,7 +712,7 @@ void GC_t::SetMatrix()
 								int ic = _react * num_groups * num_iso + ig * num_iso + iso;
 								Aorg(ir, ic) = myPt.GC(ig, iso, react, iGcType);
 								A(ir, ic) = myPt.GC(ig, iso, react, iGcType) * wt_pnum * wt_flux;
-								if (react == sigType::sigKf) A(ir, ic) *= 1E11;
+								if (react == sigType::sigKf) A(ir, ic) *= Joule2Mev;
 							}
 						}
 					}
@@ -966,7 +967,7 @@ void GC_t::GetSVD()
 	HDFwrite(svdfile, "v", 2, dims, H5T_NATIVE_DOUBLE, v.data()); //////// check !!!!!!!!!!!!!
 
 	dims[0] = min(num_row, num_col);
-	HDFwrite(svdfile, "S", 1, dims, H5T_NATIVE_DOUBLE, S.data());
+////	HDFwrite(svdfile, "S", 1, dims, H5T_NATIVE_DOUBLE, S.data());
 ////	dims[0] = SVDRank;
 ////	HDFwrite(svdfile, "s", 1, dims, H5T_NATIVE_DOUBLE, s.data());
 
