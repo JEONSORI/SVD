@@ -64,6 +64,16 @@ void GC_t::ReadGCfile() {
 	Bidx.Create(nBranchPoint);
 	HDFread(file, "BRANCH_POINT_IDX", H5T_NATIVE_INT, Bidx());
 	this->Bidx = Bidx;
+	
+	Array<int> iso_namelist; iso_namelist.Create(this->num_nuclides);
+	HDFread(file, "ISO_NAME_LIST", H5T_NATIVE_INT, iso_namelist());
+	int num_nuclides = this->num_nuclides;
+	vector<int> iso_idxlist;
+	for (int iso = 0; iso < num_nuclides; iso++) {
+		int isoidx = GetIsoIdx(iso_namelist[iso]);
+		iso_idxlist.push_back(isoidx);
+	}
+	
 
 	Array<int> nBranchType;
 	nBranchType.Create(4, nBranchPoint);
@@ -179,272 +189,206 @@ void GC_t::ReadGCfile() {
 		}
 	}
 
-	int num_fuel_pin = 0;
 	stringstream s1, s2, s3;
 
-	hid_t pin_group;
+	Array<float> dbuf;
+	Array<float> d_Tm, d_Tf, d_ppm, d_rho;
+
+	// Read burnup exposure at each step
+	dbuf.Create(this->nburnup, this->num_pins);
+	HDFread(file, "BUEXP", H5T_NATIVE_FLOAT, dbuf());
 
 	for (int itype = 0; itype < nGcType; itype++) {
-		int ipin = PinIdx[itype] + 1;
-		Array<int> ibuf;
-		Array<double> dbuf;
-		Array<double> d_Tm, d_Tf, d_ppm, d_rho;
+		int ipin = PinIdx[itype]; //// + 1 ?
+		for (int ibu = 0; ibu < this->nburnup; ibu++) {
+			burnup(ibu, itype) = dbuf(ibu, ipin);
+		}
+	}
 
-		// Open pin group
-		s1.str("");
-		s1 << "PIN" << setw(3) << setfill('0') << to_string(ipin);
-		pin_group = H5Gopen2(file, s1.str().c_str(), H5P_DEFAULT);
+	// Read and assign the base and branch conditions
+	d_Tm.Create(nTmMax + 1, nburnup);
+	HDFread(file, "COND_TMOD", H5T_NATIVE_FLOAT, d_Tm());
 
-		//// Read burnup exposure at each step
+	d_Tf.Create(nTfMax + 1, nburnup);
+	HDFread(file, "COND_TFUEL", H5T_NATIVE_FLOAT, d_Tf());
 
-		// Read and assign the base and branch conditions
-		d_Tm.Create(nTmMax + 1, nburnup);
-		HDFread(pin_group, "COND_TMOD", H5T_NATIVE_DOUBLE, d_Tm());
+	d_ppm.Create(nppmMax + 1, nburnup);
+	HDFread(file, "COND_BORON", H5T_NATIVE_FLOAT, d_ppm());
 
-		d_Tf.Create(nTfMax + 1, nburnup);
-		HDFread(pin_group, "COND_TFUEL", H5T_NATIVE_DOUBLE, d_Tf());
-
-		d_ppm.Create(nppmMax + 1, nburnup);
-		HDFread(pin_group, "COND_BORON", H5T_NATIVE_DOUBLE, d_ppm());
-
-		d_rho.Create(nrhoMax + 1, nburnup);
-		HDFread(pin_group, "COND_RHO", H5T_NATIVE_DOUBLE, d_rho());
+	d_rho.Create(nrhoMax + 1, nburnup);
+	HDFread(file, "COND_RHO", H5T_NATIVE_FLOAT, d_rho());
 
 
-		// Open the groups and containing the data set
-		hid_t ISO_GC, ISO_NAME_LIST, PNUM_LIST, PIN_FLUX;
-		ISO_GC        = H5Gopen2(pin_group, "ISO_GC",        H5P_DEFAULT);
-		ISO_NAME_LIST = H5Gopen2(pin_group, "ISO_NAME_LIST", H5P_DEFAULT);
-		PNUM_LIST     = H5Gopen2(pin_group, "ISO_ND_LIST",   H5P_DEFAULT);
-		PIN_FLUX      = H5Gopen2(pin_group, "PIN_FLUX",      H5P_DEFAULT);
+	// Open the groups and containing the data set
+	hid_t ISO_GC, ISO_NAME_LIST, PNUM_LIST, PIN_FLUX;
+	ISO_GC = H5Gopen2(file, "ISO_GC", H5P_DEFAULT);
+	PNUM_LIST = H5Gopen2(file, "ISO_ND_LIST", H5P_DEFAULT);
+	PIN_FLUX = H5Gopen2(file, "PIN_FLUX", H5P_DEFAULT);
 
-		hid_t XE_ND = H5Gopen2(PNUM_LIST, "XE_ND_LIST", H5P_DEFAULT);
+  for (int ibu = 0; ibu < nburnup; ibu++) {
+  	s2.str("");
+  	s2 << "D" << setw(3) << setfill('0') << to_string(ibu);
+  	string burnup_name = s2.str();
+  	Array<float> fluxbuf;
+  	
+  	int ncol = nTm(ibu) + nTf(ibu) + nppm(ibu) + nrho(ibu) + 1;
 
-		for (int ibu = 0; ibu < nburnup; ibu++) {
-			s2.str("");
-			s2 << "D" << setw(3) << setfill('0') << to_string(ibu);
-			string burnup_name = s2.str();
-			Array<double> xebuf, fluxbuf;
-			
-			int ncol = nTm(ibu) + nTf(ibu) + nppm(ibu) + nrho(ibu) + 1;
-			xebuf.Create(ncol, 2);
-			fluxbuf.Create(ncol, this->num_groups);
 
-			HDFread(XE_ND, burnup_name.c_str(), H5T_NATIVE_DOUBLE, xebuf());
+  	Array<float> bufGC, bufSS, bufHSS, bufD, bufpnum;
+  
+  	string tmp;
+  
+  	hid_t ISO_GC_D = H5Gopen2(ISO_GC, burnup_name.c_str(), H5P_DEFAULT);
+  
 
-			Base[ibu].pnum135(0, itype) = xebuf(0, 0);
-			Base[ibu].pnum135(1, itype) = xebuf(0, 1);
+  	bufGC.Create(6, num_groups, num_nuclides, num_pins);
+  	HDFread(ISO_GC_D, "BASE_GC", H5T_NATIVE_FLOAT, bufGC());
 
-			int icol = 1;
-			Tm(0, ibu, itype) = d_Tm(0, ibu);
-			b_Tm(ibu, itype) = d_Tm(0, ibu);
-			Tm_list(0, ibu, itype) = -1;
-			if (lTm[ibu]) {
-				for (int i = 1; i <= nTm(ibu); i++) {
-					Tm(i, ibu, itype) = d_Tm(i, ibu);
-					Tm_list(i, ibu, itype) = i - 1;
+  	bufpnum.Create(num_nuclides, num_pins);
+  	HDFread(PNUM_LIST, burnup_name.c_str(), H5T_NATIVE_FLOAT, bufpnum());
+  
+		fluxbuf.Create(ncol, num_groups, num_pins);
+  	HDFread(PIN_FLUX, burnup_name.c_str(), H5T_NATIVE_FLOAT, fluxbuf());
+  
+  	Deriv_t& myPt = Base[ibu];
+		for (int itype = 0; itype < this->nGcType; itype++) {
+			int ipin = PinIdx[itype];
+			AssignGC(myPt, bufGC, iso_idxlist, itype, ipin);
+		}
 
-					Deriv_t& myPt = dTm[ibu][i - 1];
-					myPt.pnum135(0, itype) = xebuf(icol, 0);
-					myPt.pnum135(1, itype) = xebuf(icol, 1);
-					icol++;
-				}
-			}
-
-			Tf(0, ibu, itype) = d_Tf(0, ibu);
-			b_Tf(ibu, itype) = d_Tf(0, ibu);
-			Tf_list(0, ibu, itype) = -1;
-			if (lTf[ibu]) {
-				for (int i = 1; i <= nTf(ibu); i++) {
-					Tf(i, ibu, itype) = d_Tf(i, ibu);
-					Tf_list(i, ibu, itype) = i - 1;
-
-					Deriv_t& myPt = dTf[ibu][i - 1];
-					myPt.pnum135(0, itype) = xebuf(icol, 0);
-					myPt.pnum135(1, itype) = xebuf(icol, 1);
-					icol++;
-				}
-			}
-
-			ppm(0, ibu, itype) = d_ppm(0, ibu);
-			b_ppm(ibu) = d_ppm(0, ibu);
-			ppm_list(0, ibu, itype) = -1;
-			if (lppm[ibu]) {
-				for (int i = 1; i <= nppm(ibu); i++) {
-					ppm(i, ibu, itype) = d_ppm(i, ibu);
-					ppm_list(i, ibu, itype) = i - 1;
-
-					Deriv_t& myPt = dppm[ibu][i - 1];
-					myPt.pnum135(0, itype) = xebuf(icol, 0);
-					myPt.pnum135(1, itype) = xebuf(icol, 1);
-					icol++;
-				}
-			}
-
-			rho(0, ibu, itype) = d_rho(0, ibu);
-			b_rho(ibu) = d_rho(0, ibu);
-			rho_list(0, ibu, itype) = -1;
-			if (lrho[ibu]) {
-				for (int i = 1; i <= nrho(ibu); i++) {
-					rho(i, ibu, itype) = d_rho(i, ibu);
-					rho_list(i, ibu, itype) = i - 1;
-
-					Deriv_t& myPt = drho[ibu][i - 1];
-					myPt.pnum135(0, itype) = xebuf(icol, 0);
-					myPt.pnum135(1, itype) = xebuf(icol, 1);
-					icol++;
-
-				}
-			}
-
-			vector<int> iso_namelist(num_iso + 1);
-			HDFread(ISO_NAME_LIST, burnup_name.c_str(), H5T_NATIVE_INT, iso_namelist.data());
-			int num_nuclides = iso_namelist[0];
-			iso_namelist.erase(iso_namelist.begin());
-
-			vector<int> iso_idxlist;
-			for (int iso = 0; iso < num_nuclides; iso++) {
-				int isoidx = GetIsoIdx(iso_namelist[iso]);
-				iso_idxlist.push_back(isoidx);
-			}
-
-			Array<double> bufGC, bufpnum;
-
-			string tmp;
-
-			hid_t ISO_GC_D = H5Gopen2(ISO_GC, burnup_name.c_str(), H5P_DEFAULT);
-
-			bufGC.Create(8, num_groups, num_nuclides);
-			HDFread(ISO_GC_D, "BASE_GC", H5T_NATIVE_DOUBLE, bufGC());
-
-			bufpnum.Create(num_nuclides);
-			HDFread(PNUM_LIST, burnup_name.c_str(), H5T_NATIVE_DOUBLE, bufpnum());
-
-			HDFread(PIN_FLUX, burnup_name.c_str(), H5T_NATIVE_DOUBLE, fluxbuf());
-
-			Deriv_t& myPt = Base[ibu];
-			AssignGC(myPt, bufGC, iso_idxlist, itype);
+		for (int itype = 0; itype < this->nGcType; itype++) {
+			int ipin = PinIdx[itype];
 			for (int iso = 0; iso < num_nuclides; iso++) {
 				int isoidx = iso_idxlist[iso];
-				double _pnum = bufpnum(iso);
+				float _pnum = bufpnum(iso, ipin);
 				pnum(isoidx, ibu, itype) = _pnum;
 				pnum_avg(isoidx, itype) += _pnum;
 			}
 			for (int ig = 0; ig < num_groups; ig++) {
-				flux_avg(ig, itype) += fluxbuf(0, ig); //// base
+				flux_avg(ig, itype) += fluxbuf(0, ig, ipin);
 			}
-
-			icol = 1;
-			if (lTm[ibu]) {
-				for (int ivar = 0; ivar < nTm(ibu); ivar++) {
-					s3.str("");
-					s3 << setw(2) << setfill('0') << to_string(ivar + 1);
-					string num_pad = s3.str();
-
-					tmp = "VAR_GC_TMOD" + num_pad;
-					HDFread(ISO_GC_D, tmp.c_str(), H5T_NATIVE_DOUBLE, bufGC());
-
-					Deriv_t& myPt = dTm[ibu][ivar];
-					AssignGC(myPt, bufGC, iso_idxlist, itype);
+		}
+  
+  	int icol = 1;
+  	if (lTm[ibu]) {
+  		for (int ivar = 0; ivar < nTm(ibu); ivar++) {
+  			s3.str("");
+  			s3 << setw(2) << setfill('0') << to_string(ivar + 1);
+  			string num_pad = s3.str();
+  
+				tmp = "VAR_GC_TMOD" + num_pad;
+				HDFread(ISO_GC_D, tmp.c_str(), H5T_NATIVE_FLOAT, bufGC());
+  
+  			Deriv_t& myPt = dTm[ibu][ivar];
+				for (int itype = 0; itype < nGcType; itype++) {
+					int ipin = PinIdx[itype];
+					AssignGC(myPt, bufGC, iso_idxlist, itype, ipin);
 
 					for (int iso = 0; iso < num_nuclides; iso++) { ////
 						int isoidx = iso_idxlist[iso];
-						double _pnum = bufpnum(iso);
+						double _pnum = bufpnum(iso, ipin);
 						pnum_avg(isoidx, itype) += _pnum;
 					}
 					for (int ig = 0; ig < num_groups; ig++) {
-						flux_avg(ig, itype) += fluxbuf(icol, ig);
+						flux_avg(ig, itype) += fluxbuf(icol, ig, ipin);
 					}
-					icol++;
 				}
-			}
+  			icol++;
+  		}
+  	}
+  
+  	if (lTf[ibu]) {
+  		for (int ivar = 0; ivar < nTf(ibu); ivar++) {
+  			s3.str("");
+  			s3 << setw(2) << setfill('0') << to_string(ivar + 1);
+  			string num_pad = s3.str();
+  
+				tmp = "VAR_GC_TFUEL" + num_pad;
+				HDFread(ISO_GC_D, tmp.c_str(), H5T_NATIVE_FLOAT, bufGC());
+  
+  			Deriv_t& myPt = dTf[ibu][ivar];
 
-			if (lTf[ibu]) {
-				for (int ivar = 0; ivar < nTf(ibu); ivar++) {
-					s3.str("");
-					s3 << setw(2) << setfill('0') << to_string(ivar + 1);
-					string num_pad = s3.str();
-
-					tmp = "VAR_GC_TFUEL" + num_pad;
-					HDFread(ISO_GC_D, tmp.c_str(), H5T_NATIVE_DOUBLE, bufGC());
-
-					Deriv_t& myPt = dTf[ibu][ivar];
-					AssignGC(myPt, bufGC, iso_idxlist, itype);
+				for (int itype = 0; itype < this->nGcType; itype++) {
+					int ipin = PinIdx[itype];
+					AssignGC(myPt, bufGC, iso_idxlist, itype, ipin);
 
 					for (int iso = 0; iso < num_nuclides; iso++) {
 						int isoidx = iso_idxlist[iso];
-						double _pnum = bufpnum(iso);
+						double _pnum = bufpnum(iso, ipin);
 						pnum_avg(isoidx, itype) += _pnum;
 					}
 					for (int ig = 0; ig < num_groups; ig++) {
-						flux_avg(ig, itype) += fluxbuf(icol, ig);
+						flux_avg(ig, itype) += fluxbuf(icol, ig, ipin);
 					}
-					icol++;
 				}
-			}
+  			icol++;
+  		}
+  	}
+  
+  	if (lppm[ibu]) {
+  		for (int ivar = 0; ivar < nppm(ibu); ivar++) {
+  			s3.str("");
+  			s3 << setw(2) << setfill('0') << to_string(ivar + 1);
+  			string num_pad = s3.str();
+  
+				tmp = "VAR_GC_BORON" + num_pad;
+				HDFread(ISO_GC_D, tmp.c_str(), H5T_NATIVE_FLOAT, bufGC());
+  
+  			Deriv_t& myPt = dppm[ibu][ivar];
 
-			if (lppm[ibu]) {
-				for (int ivar = 0; ivar < nppm(ibu); ivar++) {
-					s3.str("");
-					s3 << setw(2) << setfill('0') << to_string(ivar + 1);
-					string num_pad = s3.str();
+				for (int itype = 0; itype < this->nGcType; itype++) {
+					int ipin = PinIdx[itype];
+					AssignGC(myPt, bufGC, iso_idxlist, itype, ipin);
+					for (int iso = 0; iso < num_nuclides; iso++) {
+						int isoidx = iso_idxlist[iso];
+						double _pnum = bufpnum(iso, ipin);
+						pnum_avg(isoidx, itype) += _pnum;
+					}
+					for (int ig = 0; ig < num_groups; ig++) {
+						flux_avg(ig, itype) += fluxbuf(icol, ig, ipin);
+					}
+				}
+  			icol++;
+  		}
+  	}
+  
+  	if (lrho[ibu]) {
+  		for (int ivar = 0; ivar < nrho(ibu); ivar++) {
+  			s3.str("");
+  			s3 << setw(2) << setfill('0') << to_string(ivar + 1);
+  			string num_pad = s3.str();
+  
+				tmp = "VAR_GC_RHO" + num_pad;
+				HDFread(ISO_GC_D, tmp.c_str(), H5T_NATIVE_FLOAT, bufGC());
 
-					tmp = "VAR_GC_BORON" + num_pad;
-					HDFread(ISO_GC_D, tmp.c_str(), H5T_NATIVE_DOUBLE, bufGC());
-
-					Deriv_t& myPt = dppm[ibu][ivar];
-					AssignGC(myPt, bufGC, iso_idxlist, itype);
+  			Deriv_t& myPt = drho[ibu][ivar];
+				for (int itype = 0; itype < nGcType; itype++) {
+					int ipin = PinIdx[itype];
+					AssignGC(myPt, bufGC, iso_idxlist, itype, ipin);
 
 					for (int iso = 0; iso < num_nuclides; iso++) {
 						int isoidx = iso_idxlist[iso];
-						double _pnum = bufpnum(iso);
+						double _pnum = bufpnum(iso, ipin);
 						pnum_avg(isoidx, itype) += _pnum;
 					}
 					for (int ig = 0; ig < num_groups; ig++) {
-						flux_avg(ig, itype) += fluxbuf(icol, ig);
+						flux_avg(ig, itype) += fluxbuf(icol, ig, ipin);
 					}
-					icol++;
 				}
-			}
+  			icol++;
+  		}
+  	}
+  
+  	H5Gclose(ISO_GC_D);
+  
+  }
 
-			if (lrho[ibu]) {
-				for (int ivar = 0; ivar < nrho(ibu); ivar++) {
-					s3.str("");
-					s3 << setw(2) << setfill('0') << to_string(ivar + 1);
-					string num_pad = s3.str();
+	// Close the groups for the next iteration
 
-					tmp = "VAR_GC_RHO" + num_pad;
-					HDFread(ISO_GC_D, tmp.c_str(), H5T_NATIVE_DOUBLE, bufGC());
+	H5Gclose(ISO_GC);
+	H5Gclose(PNUM_LIST);
+	H5Gclose(PIN_FLUX);
 
-					Deriv_t& myPt = drho[ibu][ivar];
-					AssignGC(myPt, bufGC, iso_idxlist, itype);
-
-					for (int iso = 0; iso < num_nuclides; iso++) {
-						int isoidx = iso_idxlist[iso];
-						double _pnum = bufpnum(iso);
-						pnum_avg(isoidx, itype) += _pnum;
-					}
-					for (int ig = 0; ig < num_groups; ig++) {
-						flux_avg(ig, itype) += fluxbuf(icol, ig);
-					}
-					icol++;
-				}
-			}
-
-			H5Gclose(ISO_GC_D);
-
-		}
-
-		// Close the groups for the next iteration
-
-		H5Gclose(pin_group);
-		H5Gclose(ISO_GC);
-		H5Gclose(ISO_NAME_LIST);
-		H5Gclose(PNUM_LIST);
-	}
-
-////	double inv_nburnup = 1.0 / ((double)nburnup);
-////	pnum_avg *= inv_nburnup; ////
 	double inv_nstate = 1.0 / ((double)nstate);
 	pnum_avg *= inv_nstate;
 	flux_avg *= inv_nstate;
@@ -547,7 +491,7 @@ void GC_t::AllocGC(Deriv_t& BP, int num_iso, int num_groups, int nGcType)
 
 	BP.pnum135.Create(2, nGcType);
 
-	int num_react = sigType::num_sigType - 3;
+	int num_react = sigType::num_sigType - 4;
 	BP.GC.Create(num_groups, num_iso, num_react, nGcType);
 }
 
@@ -556,58 +500,41 @@ int GC_t::GetIsoIdx(int ZID) {
 		if (nuclides[i] == ZID) return i;
 };
 
-void GC_t::AssignGC(Deriv_t& BP, Array<double>& GC, vector<int>& isolist, int iGcType)
+void GC_t::AssignGC(Deriv_t& BP, Array<float>& GC, vector<int>& isolist, int iGcType, int ipin)
 {
 	int niso = isolist.size();
-	int num_react = sigType::num_sigType - 3;
 
-	for (int react = 0; react < num_react; react++) {
-		for (int iso = 0; iso < niso; iso++) {
-			int isoidx = isolist[iso];
-			for (int ig = 0; ig < num_groups; ig++) {
-				BP.GC(ig, isoidx, react, iGcType) = GC(react, ig, iso);
-			}
+	for (int iso = 0; iso < niso; iso++) {
+		int isoidx = isolist[iso];
+		for (int ig = 0; ig < num_groups; ig++) {
+			BP.GC(ig, isoidx, sigType::sigT,   iGcType)   = GC(0, ig, iso, ipin);
+			BP.GC(ig, isoidx, sigType::sigA,   iGcType)   = GC(2, ig, iso, ipin);
+			BP.GC(ig, isoidx, sigType::sigF,   iGcType)   = GC(3, ig, iso, ipin);
+			BP.GC(ig, isoidx, sigType::sigNf,  iGcType)   = GC(4, ig, iso, ipin);
+			BP.GC(ig, isoidx, sigType::sigCap, iGcType)   = GC(5, ig, iso, ipin);
 		}
 	}
-
-	//for (int iso = 0; iso < niso; iso++) {
-	//	int isoidx = isolist[iso];
-	//	for (int ig = 0; ig < num_groups; ig++) {
-	//		BP.sigTr(isoidx, ig, iGcType) = GC(0, ig, iso);
-	//		BP.sigA(isoidx, ig, iGcType)  = GC(1, ig, iso);
-	//		BP.sigF(isoidx, ig, iGcType)  = GC(2, ig, iso);
-	//		BP.sigNf(isoidx, ig, iGcType) = GC(3, ig, iso);
-	//		BP.sigKf(isoidx, ig, iGcType) = GC(4, ig, iso);
-	//		BP.sigT(isoidx, ig, iGcType)  = GC(5, ig, iso);
-	//		BP.chi(isoidx, ig, iGcType)   = GC(6, ig, iso);
-	//		BP.n2n(isoidx, ig, iGcType)   = GC(7, ig, iso);
-	//		for (int ig2 = 0; ig2 < num_groups; ig2++) {
-	//			BP.sigS(isoidx, ig2, ig, iGcType) = SS(ig, ig2, iso);
-	//		}
-	//	}
-	//}
-
 }
 
 void GC_t::SetMatrix()
 {
-	int num_react = sigType::num_sigType - 3;
+	int num_react = sigType::num_sigType - 4; // micro form
 
 	this->num_row = nGcType * nstate;
-////	this->num_col = num_iso * num_react * num_groups;
-	this->num_col = num_iso * (num_react - 1) * num_groups;
+	this->num_col = num_iso * (num_react - 2) * num_groups; // except for sigTr, sigKf
 
 	A.resize(num_row, num_col); 
 	Aorg.resize(num_row, num_col);
+
 	int ir = 0;
 
 	for (int ibu = 0; ibu < nburnup; ibu++) {
 		Deriv_t& myPt = Base[ibu];
 		for (int iGcType = 0; iGcType < nGcType; iGcType++) {
 			BaseMap(iGcType, ibu) = ir;
+			int _react = 0;
 			for (int react = 0; react < num_react; react++) {
-				int _react = react;
-				if (react > sigType::Chi) _react = react - 1;
+				if (react == sigType::sigTr || react == sigType::sigKf) continue;
 				for (int ig = 0; ig < num_groups; ig++) {
 					double wt_flux = flux_avg(ig, iGcType);
 					for (int iso = 0; iso < num_iso; iso++) {
@@ -615,9 +542,9 @@ void GC_t::SetMatrix()
 						int ic = _react * num_groups * num_iso + ig * num_iso + iso;
 						Aorg(ir, ic) = myPt.GC(ig, iso, react, iGcType);
 						A(ir, ic) = myPt.GC(ig, iso, react, iGcType) * wt_pnum * wt_flux;
-						if (react == sigType::sigKf) A(ir, ic) *= Joule2Mev;
 					}
 				}
+				_react++;
 			}
 			ir++;
 		}
@@ -630,9 +557,9 @@ void GC_t::SetMatrix()
 				Deriv_t& myPt = dTm[ibu][idev];
 				for (int iGcType = 0; iGcType < nGcType; iGcType++) {
 					BranchMap(iGcType, ivar, bibu) = ir;
+					int _react = 0;
 					for (int react = 0; react < num_react; react++) {
-						int _react = react; ////
-						if (react > sigType::Chi) _react = react - 1;
+						if (react == sigType::sigTr || react == sigType::sigKf) continue;
 						for (int ig = 0; ig < num_groups; ig++) {
 							double wt_flux = flux_avg(ig, iGcType);
 							for (int iso = 0; iso < num_iso; iso++) {
@@ -640,9 +567,9 @@ void GC_t::SetMatrix()
 								int ic = _react * num_groups * num_iso + ig * num_iso + iso;
 								Aorg(ir, ic) = myPt.GC(ig, iso, react, iGcType);
 								A(ir, ic) = myPt.GC(ig, iso, react, iGcType) * wt_pnum * wt_flux;
-								if (react == sigType::sigKf) A(ir, ic) *= Joule2Mev;
 							}
 						}
+						_react++;
 					}
 					ir++;
 				}
@@ -654,9 +581,9 @@ void GC_t::SetMatrix()
 				Deriv_t& myPt = dTf[ibu][idev];
 				for (int iGcType = 0; iGcType < nGcType; iGcType++) {
 					BranchMap(iGcType, ivar, bibu) = ir;
+					int _react = 0;
 					for (int react = 0; react < num_react; react++) {
-						int _react = react;
-						if (react > sigType::Chi) _react = react - 1;
+						if (react == sigType::sigTr || react == sigType::sigKf) continue;
 						for (int ig = 0; ig < num_groups; ig++) {
 							double wt_flux = flux_avg(ig, iGcType);
 							for (int iso = 0; iso < num_iso; iso++) {
@@ -664,9 +591,9 @@ void GC_t::SetMatrix()
 								int ic = _react * num_groups * num_iso + ig * num_iso + iso;
 								Aorg(ir, ic) = myPt.GC(ig, iso, react, iGcType);
 								A(ir, ic) = myPt.GC(ig, iso, react, iGcType) * wt_pnum * wt_flux;
-								if (react == sigType::sigKf) A(ir, ic) *= Joule2Mev;
 							}
 						}
+						_react++;
 					}
 					ir++;
 				}
@@ -678,9 +605,9 @@ void GC_t::SetMatrix()
 				Deriv_t& myPt = dppm[ibu][idev];
 				for (int iGcType = 0; iGcType < nGcType; iGcType++) {
 					BranchMap(iGcType, ivar, bibu) = ir;
+					int _react = 0;
 					for (int react = 0; react < num_react; react++) {
-						int _react = react;
-						if (react > sigType::Chi) _react = react - 1;
+						if (react == sigType::sigTr || react == sigType::sigKf) continue;
 						for (int ig = 0; ig < num_groups; ig++) {
 							double wt_flux = flux_avg(ig, iGcType);
 							for (int iso = 0; iso < num_iso; iso++) {
@@ -688,9 +615,9 @@ void GC_t::SetMatrix()
 								int ic = _react * num_groups * num_iso + ig * num_iso + iso;
 								Aorg(ir, ic) = myPt.GC(ig, iso, react, iGcType);
 								A(ir, ic) = myPt.GC(ig, iso, react, iGcType) * wt_pnum * wt_flux;
-								if (react == sigType::sigKf) A(ir, ic) *= Joule2Mev;
 							}
 						}
+						_react++;
 					}
 					ir++;
 				}
@@ -702,9 +629,9 @@ void GC_t::SetMatrix()
 				Deriv_t& myPt = drho[ibu][idev];
 				for (int iGcType = 0; iGcType < nGcType; iGcType++) {
 					BranchMap(iGcType, ivar, bibu) = ir;
+					int _react = 0;
 					for (int react = 0; react < num_react; react++) {
-						int _react = react;
-						if (react > sigType::Chi) _react = react - 1;
+						if (react == sigType::sigTr || react == sigType::sigKf) continue;
 						for (int ig = 0; ig < num_groups; ig++) {
 							double wt_flux = flux_avg(ig, iGcType);
 							for (int iso = 0; iso < num_iso; iso++) {
@@ -715,6 +642,7 @@ void GC_t::SetMatrix()
 								if (react == sigType::sigKf) A(ir, ic) *= Joule2Mev;
 							}
 						}
+						_react++;
 					}
 					ir++;
 				}

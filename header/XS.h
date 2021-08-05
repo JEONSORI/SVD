@@ -9,13 +9,13 @@ extern GC_t GC;
 enum sigType {
 	sigTr,
 	sigA,
+	sigT,
 	sigF,
 	sigNf,
 	sigKf,
-	sigT,
-	Chi,
-	n2n,
+	sigCap,
 	sigS,
+	D,
 	CHI,
 	SPH,
 	num_sigType
@@ -32,12 +32,12 @@ struct GC_t
 	hid_t svdfile;
 	string filename, asyname;
 	int asyType;
-	int num_pins, num_groups, num_iso = 30, nburnup, nstate = 0, nBranchState = 0;
+	int num_pins, num_groups, num_iso = 32, nburnup, nstate = 0, nBranchState = 0;
 	int nGcType;
 	int nTmMax, nTfMax, nppmMax, nrhoMax;
-	int num_nuclides = 30;
-	int nuclides[30] = {
-			0,   5000,   5010,  53135,  54135,  60147,  61147,  61148,
+	int num_nuclides = 32;
+	int nuclides[32] = {
+			0,   1001, 5000,   5010,  40000, 53135,  54135,  60147,  61147,  61148,
 		61149,  62149,  64000,  92234,  92235,  92236,  92237,  92238,
 		93237,  93238,  93239,  94238,  94239,  94240,  94241,  94242,
 		95241,  95242,  95243,  96242,  96243,  96244
@@ -60,7 +60,7 @@ struct GC_t
 	void MappingPinGC(const int narray, const int asyType, Array<int>& PinIdx);
 	void AllocGC(Deriv_t& BP, int num_iso, int num_groups, int nGcType);
 	int GetIsoIdx(int ZID);
-	void AssignGC(Deriv_t& BP, Array<double>& GC, vector<int>& isolist, int iGcType);
+	void AssignGC(Deriv_t& BP, Array<float>& GC, vector<int>& isolist, int iGcType, int ipin);
 	void SetMatrix();
 	void SetBaseMatrix();
 	void SetBranchMatrix();
