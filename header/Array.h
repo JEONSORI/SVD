@@ -2,7 +2,7 @@
 
 #include "Defines.h"
 #include "Util.h"
-
+#include <string.h>
 namespace ArrayOp {
 
 	template <typename T>

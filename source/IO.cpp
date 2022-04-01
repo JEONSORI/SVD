@@ -1,6 +1,7 @@
 #include "Defines.h"
 #include "IO.h"
 
+
 void Uppercase(string& oneline)
 {
 	transform(oneline.begin(), oneline.end(), oneline.begin(), ::toupper);

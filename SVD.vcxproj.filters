@@ -18,7 +18,7 @@
     <ClCompile Include="source\XS.cpp">
       <Filter>source</Filter>
     </ClCompile>
-    <ClCompile Include="header\Array.cpp">
+    <ClCompile Include="source\Array.cpp">
       <Filter>source</Filter>
     </ClCompile>
   </ItemGroup>

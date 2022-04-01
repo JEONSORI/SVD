@@ -157,7 +157,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="header\Array.cpp" />
+    <ClCompile Include="source\Array.cpp" />
     <ClCompile Include="source\IO.cpp" />
     <ClCompile Include="source\Main.cpp" />
     <ClCompile Include="source\XS.cpp" />

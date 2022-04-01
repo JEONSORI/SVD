@@ -1,7 +1,6 @@
 #pragma once
 
 #include "Defines.h"
-
 // Termination
 
 enum errorCode {

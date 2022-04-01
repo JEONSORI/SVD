@@ -1,7 +1,7 @@
 #include "Defines.h"
 #include "IO.h"
 #include "XS.h"
-
+#include "Array.h"
 Control Cntl;
 
 int main(int argc, char* argv[]) {

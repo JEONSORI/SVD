@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Defines.h"
+#include <string.h>
 
 extern Control Cntl;
 
